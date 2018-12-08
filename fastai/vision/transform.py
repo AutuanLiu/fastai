@@ -3,7 +3,7 @@ from ..torch_core import *
 from .image import *
 from .image import _affine_mult
 
-__all__ = ['brightness', 'contrast', 'crop', 'crop_pad', 'dihedral', 'dihedral_affine', 'flip_affine', 'flip_lr', 
+__all__ = ['brightness', 'contrast', 'crop', 'crop_pad', 'dihedral', 'dihedral_affine', 'flip_affine', 'flip_lr',
            'get_transforms', 'jitter', 'pad', 'perspective_warp', 'rand_pad', 'rand_crop', 'rand_zoom', 'rotate', 'skew', 'squish',
            'rand_resize_crop', 'symmetric_warp', 'tilt', 'zoom', 'zoom_crop']
 
@@ -58,10 +58,13 @@ def jitter(c, magnitude:uniform):
     return c
 
 @TfmPixel
-def flip_lr(x): return x.flip(2)
+def flip_lr(x): 
+    "Flip `x` horizontally."
+    return x.flip(2)
 
 @TfmAffine
 def flip_affine() -> TfmAffine:
+    "Flip `x` horizontally."
     return [[-1, 0, 0.],
             [0,  1, 0],
             [0,  0, 1.]]

@@ -30,6 +30,7 @@ class WeightDropout(nn.Module):
             #Makes a copy of the weights of the selected layers.
             w = getattr(self.module, layer)
             self.register_parameter(f'{layer}_raw', nn.Parameter(w.data))
+            self.module._parameters[layer] = F.dropout(w, p=self.weight_p, training=False)
 
     def _setweights(self):
         "Apply dropout to the raw weights."
@@ -115,7 +116,7 @@ class RNNCore(nn.Module):
             raw_outputs.append(raw_output)
             if l != self.n_layers - 1: raw_output = hid_dp(raw_output)
             outputs.append(raw_output)
-        self.hidden = to_detach(new_hidden)
+        self.hidden = to_detach(new_hidden, cpu=False)
         return raw_outputs, outputs
 
     def _one_hidden(self, l:int)->Tensor:
@@ -132,7 +133,6 @@ class RNNCore(nn.Module):
 
 class LinearDecoder(nn.Module):
     "To go on top of a RNNCore module and create a Language Model."
-
     initrange=0.1
 
     def __init__(self, n_out:int, n_hid:int, output_p:float, tie_encoder:nn.Module=None, bias:bool=True):
@@ -210,7 +210,9 @@ def get_language_model(vocab_sz:int, emb_sz:int, n_hid:int, n_layers:int, pad_to
     rnn_enc = RNNCore(vocab_sz, emb_sz, n_hid=n_hid, n_layers=n_layers, pad_token=pad_token, qrnn=qrnn, bidir=bidir,
                  hidden_p=hidden_p, input_p=input_p, embed_p=embed_p, weight_p=weight_p)
     enc = rnn_enc.encoder if tie_weights else None
-    return SequentialRNN(rnn_enc, LinearDecoder(vocab_sz, emb_sz, output_p, tie_encoder=enc, bias=bias))
+    model = SequentialRNN(rnn_enc, LinearDecoder(vocab_sz, emb_sz, output_p, tie_encoder=enc, bias=bias))
+    model.reset()
+    return model
 
 def get_rnn_classifier(bptt:int, max_seq:int, n_class:int, vocab_sz:int, emb_sz:int, n_hid:int, n_layers:int,
                        pad_token:int, layers:Collection[int], drops:Collection[float], bidir:bool=False, qrnn:bool=False,
@@ -218,4 +220,6 @@ def get_rnn_classifier(bptt:int, max_seq:int, n_class:int, vocab_sz:int, emb_sz:
     "Create a RNN classifier model."
     rnn_enc = MultiBatchRNNCore(bptt, max_seq, vocab_sz, emb_sz, n_hid, n_layers, pad_token=pad_token, bidir=bidir,
                       qrnn=qrnn, hidden_p=hidden_p, input_p=input_p, embed_p=embed_p, weight_p=weight_p)
-    return SequentialRNN(rnn_enc, PoolingLinearClassifier(layers, drops))
+    model = SequentialRNN(rnn_enc, PoolingLinearClassifier(layers, drops))
+    model.reset()
+    return model

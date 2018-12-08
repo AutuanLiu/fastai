@@ -9,6 +9,7 @@
 sidebar_d = {
     'Getting started': {
         'Installation': 'https://github.com/fastai/fastai/blob/master/README.md#installation',
+        'Installation Extras': '/install',
         'Troubleshooting': '/troubleshoot'
     },
     'Training': {
@@ -74,8 +75,14 @@ sidebar_d = {
         'core': '/core',
         'torch_core': '/torch_core',
     },
+    'Tutorials': {
+        'Look at data': '/tutorial.data',
+        'Inference Learner': '/tutorial.inference',
+        'Custom ItemList': '/tutorial.itemlist',
+    },
     'Doc authoring': {
-        'Overview': '/gen_doc',
+        'Instructions': '/gen_doc_main',
+        'gen_doc': '/gen_doc',
         'gen_doc.gen_notebooks': '/gen_doc.gen_notebooks',
         'gen_doc.nbdoc': '/gen_doc.nbdoc',
         'gen_doc.convert2html': '/gen_doc.convert2html',

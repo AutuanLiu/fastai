@@ -816,8 +816,6 @@ Remember that master should always have `.dev0` in its version number, e.g. `0.1
 
 Tagging targets:
 
-XXX: `make commit-tag`
-
 * List tags
 
     all tags:
@@ -827,7 +825,7 @@ XXX: `make commit-tag`
 
     tags matching pattern:
     ```
-    git tag -l "v1.8.5*"
+    git tag -l "1.8.5*"
     ```
 
     by date:
@@ -843,27 +841,27 @@ XXX: `make commit-tag`
 
 * Creating tags
 
-    To tag current checkout with tag "v1.0.5" with current date:
+    To tag current checkout with tag "1.0.5" with current date:
 
     ```
     git tag -a test-1.0.5 -m "test-1.0.5"
     git push --tags origin master
     ```
 
-    To tag commit 9fceb02a with tag "v1.0.5" with current date:
+    To tag commit 9fceb02a with tag "1.0.5" with current date:
 
     ```
     git checkout 9fceb02a
-    git tag -a v1.0.5 -m "v1.0.5"
+    git tag -a v1.0.5 -m "1.0.5"
     git push --tags origin master
     git checkout master
     ```
 
-    To tag commit 9fceb02a with tag "v1.0.5" with the date of that commit:
+    To tag commit 9fceb02a with tag "1.0.5" with the date of that commit:
 
     ```
     git checkout 9fceb02a
-    GIT_COMMITTER_DATE="$(git show --format=%aD | head -1)" git tag -a v1.0.5 -m "v1.0.5"
+    GIT_COMMITTER_DATE="$(git show --format=%aD | head -1)" git tag -a v1.0.5 -m "1.0.5"
     git push --tags origin master
     git checkout master
     ```
@@ -871,9 +869,15 @@ XXX: `make commit-tag`
     or the same without needing to `git checkout` and with typing the variables only once:
 
     ```
-    tag="v0.1.3" commit="9fceb02a" bash -c 'GIT_COMMITTER_DATE="$(git show --format=%aD $commit)" git tag -a $tag -m $tag $commit'
+    tag="0.1.3" commit="9fceb02a" bash -c 'GIT_COMMITTER_DATE="$(git show --format=%aD $commit)" git tag -a $tag -m $tag $commit'
     git push --tags origin master
     ```
+
+    To find out the hash of the last commit in a branch, to use in back-tagging:
+    ```
+    git log -n 1 origin/release-1.0.25
+    ```
+
 
 * Delete remote tag:
 
@@ -941,6 +945,30 @@ pip install -e .
 conda deactivate
 conda env remove -y --name fastai-py3.6
 ```
+
+### Installed Packages
+
+When debugging issues it helps to know what packages have been installed. The following will dump the installed versions list in identical format for conda and pypi (`package-name==version`):
+
+* Conda:
+   ```
+   conda list | egrep -v '^#' | perl -ne 's/_/-/g; @x=split /\s+/, lc $_; print "$x[0]==$x[1]\n"' | sort | uniq > packages-conda.txt
+   ```
+
+* PyPi:
+
+   ```
+   pip list | egrep -v '^(Package|-----)' | perl -ne 's/_/-/g; @x=split /\s+/, lc $_; print "$x[0]==$x[1]\n"' | sort | uniq > packages-pip.txt
+   ```
+
+* Comparing the output of both environments:
+
+   ```
+   diff -u0 --suppress-common-lines packages-conda.txt packages-pip.txt | grep -v "@@"
+   ```
+
+The comparison is useful for identifying differences in these two package environment (for example when CI build fails with pypi but not with conda).
+
 
 ### Package Dependencies
 
@@ -1084,7 +1112,15 @@ platform are shown):
     conda search -c fastai --override --platform linux-64
     ```
 
+* To find out why a particular package is installed (i.e. which package requires it):
 
+    ```
+    conda create -n c43 conda=4.3
+    conda activate c43
+    python -m conda search --reverse-dependency --full-name pillow
+    ```
+
+    Note, that conda==4.4 removed this functionality, that's why we need a special downgraded to conda==4.3 environment to make this work as a workaround.
 
 
 #### PyPI Dependencies
@@ -1175,6 +1211,34 @@ The same can be repeated for getting test requirements, just repeat the same pro
 
 
 
+### Conditional Dependencies
+
+Here is how to specify conditional dependencies, e.g. depending on python version:
+
+* Conda
+
+   In `meta.yaml`:
+   ```
+     run:
+       - dataclasses # [py36]
+       - fastprogress >=0.1.18
+       [...]
+   ```
+   Here `# [py36]` tells `conda-build` that this requirement is only for python3.6, it's not a comment.
+
+* Pypi
+
+   In `setup.py`:
+
+   ```
+   requirements = ["dataclasses ; python_version<'3.7'", "fastprogress>=0.1.18", ...]
+   ```
+   Here `; python_version<'3.7'` instructs the wheel to use a dependency on `dataclasses` only for python versions lesser than `3.7`.
+
+   This recent syntax requires `setuptools>=36.2` on the build system. For more info [see](https://hynek.me/articles/conditional-python-dependencies/).
+
+
+
 ## CI/CD
 
 ### Azure DevOps CI (CPU-only)
@@ -1241,6 +1305,8 @@ To trigger a manual build of go to [Builds](https://dev.azure.com/fastdotai/fast
 
 If you want to run a build as a cron-job, rather than it getting triggered by a PR or a push, add the pipeline script as normal, and then go to that build's [Edit], and then [Triggers], disable CI and PR entries and configure a scheduled entry.
 
+Also, most likely you don't want the outcome of the scheduled job to be attached to the most recent commit on github (as it will most likely be misleading if it's a failure). So to fix that under [Edit], and then [YAML], followed by [Get Sources], and uncheck "Report Build Status" on the right side.
+
 
 #### Modifying `azure-pipelines.yml`
 
@@ -1273,6 +1339,49 @@ And remember to sync the branch with the master changes so that you're testing t
 #### Multiple Pipelines In The Same Repo
 
 Currently [New] will not let you choose an alternative pipeline. So until this is fixed, let it use the default `azure-pipelines.yml`, Save and then go and Edit it and replace with a different file from the repository (and perhaps switching to a different branch if needed), using [...].
+
+#### Debug
+
+Download the logs from the build report page, unzip the file, and then cleanup the timestamps:
+```
+mkdir logs
+mv logs_2005.zip logs
+cd logs
+unzip logs_2005.zip
+find . -type f -exec perl -pi -e 's|^\S+ ||' {} \;
+find . -type f -exec perl -0777 -pi -e 's|\n\n|\n|g' {} \;
+```
+
+#### Debugging segfaults
+
+Here is how to get segfault backtrace directly or via the core dump in a non-interactive way:
+
+* MacOS
+
+   ```
+   # allow large core files
+   ulimit -c unlimited
+   # test core dump files can be written by this user
+   touch /cores/test && rm /cores/test
+   # any cores prior to the run?
+   ls -l /cores/
+   # run the program that segfaults
+   py.test tests/test_vision_data_block.py
+   # any cores after the run?
+   ls -l /cores/
+   # get the backtrace of the first core file
+   echo bt | lldb -c /cores/core.*
+   ```
+
+* Linux
+
+   ```
+   # allow large core files
+   ulimit -c unlimited
+   export SEGFAULT_SIGNALS="all"
+   # catch the segfault and get the backtrace
+   catchsegv py.test tests/test_vision_data_block.py
+   ```
 
 #### Support
 
