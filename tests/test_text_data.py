@@ -44,9 +44,9 @@ def special_fastai_test_rule(s): return s.replace("fast ai", "@fastdotai")
 def test_from_csv_and_from_df():
     path = untar_data(URLs.IMDB_SAMPLE)
     df = text_df(['neg','pos']) #"fast ai is a cool project", "hello world"
-    data1 = TextClasDataBunch.from_df(path, train_df=df, valid_df=df, test_df=df, label_cols=0, text_cols=["text"])
+    data1 = TextClasDataBunch.from_df(path, train_df=df, valid_df=df, test_df=df[:20], label_cols=0, text_cols=["text"])
     assert len(data1.classes) == 2
-
+    x,y = next(iter(data1.valid_dl)) # Will fail if the SortSampler keys get messed up between train and valid. 
     df = text_df(['neg','pos','neg pos'])
     data2 = TextClasDataBunch.from_df(path, train_df=df, valid_df=df, test_df=df,
                                   label_cols=0, text_cols=["text"], label_delim=' ',
@@ -116,7 +116,7 @@ def test_from_ids_works_for_equally_length_sentences():
     lbl = [0]*10
     data = TextClasDataBunch.from_ids('/tmp', vocab=Vocab({0: BOS, 1:PAD}),
                                       train_ids=ids, train_lbls=lbl,
-                                      valid_ids=ids, valid_lbls=lbl, classes={0:0})
+                                      valid_ids=ids, valid_lbls=lbl, classes={0:0}, bs=8)
     text_classifier_learner(data).fit(1)
 
 def test_from_ids_works_for_variable_length_sentences():
@@ -124,5 +124,5 @@ def test_from_ids_works_for_variable_length_sentences():
     lbl = [0]*10
     data = TextClasDataBunch.from_ids('/tmp', vocab=Vocab({0: BOS, 1:PAD}),
                                       train_ids=ids, train_lbls=lbl,
-                                      valid_ids=ids, valid_lbls=lbl, classes={0:0})
+                                      valid_ids=ids, valid_lbls=lbl, classes={0:0}, bs=8)
     text_classifier_learner(data).fit(1)
