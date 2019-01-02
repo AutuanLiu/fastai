@@ -53,7 +53,7 @@ fastai_types = {
     TensorImageSize:'TensorImageSize', Tensors:'Tensors', Weights:'Weights', AffineFunc:'AffineFunc',
     HookFunc:'HookFunc', LogitTensorImage:'LogitTensorImage', LossFunction:'LossFunction', MetricFunc:'MetricFunc',
     MetricFuncList:'MetricFuncList', MetricsList:'MetricsList', OptLossFunc:'OptLossFunc', OptMetrics:'OptMetrics',
-    OptSplitFunc:'OptSplitFunc', PixelFunc:'PixelFunc', LightingFunc:'LightingFunc',
+    OptSplitFunc:'OptSplitFunc', PixelFunc:'PixelFunc', LightingFunc:'LightingFunc', IntsOrStrs:'IntsOrStrs'
 }
 
 torch.set_num_threads(4) # OpenMP doesn't generally like too many threads
@@ -174,8 +174,8 @@ def set_bn_eval(m:nn.Module)->None:
         set_bn_eval(l)
 
 def to_half(b:Collection[Tensor])->Collection[Tensor]:
-    "Set the input of batch `b` to half precision."
-    return [b[0].half(), b[1]]
+    "Set the input of batch `b` to half precision if isn't an int type."
+    return [b[0].half(), b[1]] if b[0].dtype != torch.int64 else b
 
 def bn2float(module:nn.Module)->nn.Module:
     "If `module` is batchnorm don't use half precision."
@@ -305,8 +305,16 @@ def one_param(m: nn.Module)->Tensor:
 def try_int(o:Any)->Any:
     "Try to convert `o` to int, default to `o` if not possible."
     # NB: single-item rank-1 array/tensor can be converted to int, but we don't want to do this
-    if isinstance(o, (np.ndarray,Tensor)): return o if len(o.shape) else int(o)
+    if isinstance(o, (np.ndarray,Tensor)): return o if o.ndim else int(o)
     if isinstance(o, collections.Sized) or getattr(o,'__array_interface__',False): return o
     try: return int(o)
     except: return o
 
+def get_model(model:nn.Module):
+    "Return the model maybe wrapped inside `model`."
+    return model.module if isinstance(model, nn.DataParallel) else model
+
+#Monkey-patch nn.DataParallel.reset
+def _data_parallel_reset(self): 
+    if hasattr(self.module, 'reset'): self.module.reset()
+nn.DataParallel.reset = _data_parallel_reset

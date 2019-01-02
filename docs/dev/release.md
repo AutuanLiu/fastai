@@ -52,8 +52,11 @@ You can skip this step if you have done it once already on the system you're mak
 
     You don't really need it, as the anaconda client cashes your credentials so you need to login only infrequently.
 
+4. Install upload clients
 
-
+   ```
+   conda install anaconda-client twine
+   ```
 
 
 ## Quick Release Process
@@ -655,9 +658,15 @@ See `fastai/builds/custom-conda-builds` for recipes we created already.
 
 Every package we release on conda needs to be either `noarch` or we need to build a whole slew of packages for each platform we choose to support, `linux-64`, `win-64`, etc.
 
-So far `fastai` is `noarch` (pure python), so we only need to make one `python3.6` and `python3.7` releases.
+At this moment `fastai` is released as a generic `noarch` (pure python), and we don't even make separate `py36` and `py37` releases. That means we can't use [preprocess-selectors](https://conda.io/docs/user-guide/tasks/build-packages/define-metadata.html#preprocess-selectors), since they will all evaluate to `True`, no matter the platform or python version, according to [this](https://conda.io/docs/user-guide/tasks/build-packages/define-metadata.html#architecture-independent-packages). As such we can't instruct conda to install a certain dependency only for a specific python version. For example, this doesn't do anything:
 
-But as shown in the previous section we also have to deal with several dependencies which are not on conda. If they are `noarch`, it should be easy to release conda packages for dependencies every so often. If they are platform-specific we will have to remove them from conda dependencies and ask users to install those via pip. An easy way to check whether a package for a specific platform is available is to:
+```
+  run:
+    - dataclasses # [py36]
+```
+That is, `dataclasses` will be installed on any python platform regardless of its version. For the above to work, i.e. install `dataclasses` dependency only on `py36` platforms, requires that we make separate `py36` and `py37` `fastai` releases.
+
+As shown in the previous section we also have to deal with several dependencies which are not on conda. If they are `noarch`, it should be easy to release conda packages for dependencies every so often. If they are platform-specific we will have to remove them from conda dependencies and ask users to install those via pip. An easy way to check whether a package for a specific platform is available is to:
 
 ```
 conda search -i --platform win-64
@@ -1022,6 +1031,45 @@ If something found to be wrong in the last release, yet the HEAD is unstable to 
 
 ## Release Making Related Topics
 
+### Install The Locally Build Packages
+
+If you want to install the package directly from your filesystem, e.g. to test before uploading, run:
+
+```
+make dist-conda
+make install-conda-local
+```
+
+
+
+
+### Speeding Up Build Time
+
+When experimenting with different builds (in particular custom conda builds) the following are useful:
+
+* use all or several CPU cores:
+
+   ```
+   MAKEFLAGS="-j" conda-build ...
+   ```
+
+* skip the testing stage:
+
+   ```
+   conda-build ...  --no-test
+   ```
+   This could speed up the build time x5 times! But of course, the final build to be uploaded, shouldn't skip this stage.
+
+
+* if just needing to check that the build is successful (e.g. for packages requiring compiling code:
+
+   ```
+   conda-build ... --build-only
+   ```
+
+
+
+
 ### Run Install Tests In A Fresh Environment
 
 While CI builds now do exactly this, it might be still useful to be able to do it manually, since CI builds are very slow to tweak and experiment with. So here is a quick copy-n-paste recipe to build one and clean it up.
@@ -1208,8 +1256,8 @@ platform are shown):
 * To find out why a particular package is installed (i.e. which package requires it):
 
     ```
-    conda create -n c43 conda=4.3
-    conda activate c43
+    conda create -n conda-4.3 conda=4.3
+    conda activate conda-4.3
     python -m conda search --reverse-dependency --full-name pillow
     ```
 
@@ -1302,6 +1350,18 @@ rm req1.txt req2.txt req.txt
 
 The same can be repeated for getting test requirements, just repeat the same process inside `tests` directory.
 
+
+## Copying packages for other channels
+
+Currently we want to use the version of spacy and some of its deps from the conda-forge channel, instead of the main anaconda channel. To do this, we copy the relevent packages in to our channel, as so:
+
+```
+anaconda copy conda-forge/spacy/2.0.18 --to-owner fastai --from-label gcc7
+anaconda copy conda-forge/regex/2018.01.10 --to-owner fastai --from-label gcc7
+anaconda copy conda-forge/thinc/6.12.1 --to-owner fastai --from-label gcc7
+```
+
+This copies all architectures, not just your current architecture.
 
 
 ### Conditional Dependencies

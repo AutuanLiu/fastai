@@ -13,18 +13,74 @@ of that change.
 
 
 
-
-
-## 1.0.38.dev0 (Work In Progress)
+## 1.0.40.dev0 (Work In Progress)
 
 ### New:
 
-- `check_perf` - performance improvement recommendations
-
 ### Changed:
+
+- If no label is provided, the test set has `EmptyLabel` for every item
 
 ### Fixed:
 
+- Avoid bugs in tabular by copying the dataframe in `TabularList.from_df`
+- Can properly change the batch size even if the `DataLoader` is an `LanguageDataLoader`
+- Bug in `ImageBBox` when all the targets had the same number of bboxes
+
+
+## 1.0.39 (2018-12-28)
+
+### Breaking changes:
+
+- `Fbeta_binary` is now `FBeta`
+
+### New:
+
+- `Learner.to_fp32()` to go back to FP32 precision mode
+- `cont_cat_split` function to automatically get categorical/continuous variables (thanks to RealLankinen)
+- Lots of new metrics thanks to Sven Becker: `mse/mean_squared_error`, `mae/mean_absolute_error`, `rmse/root_mean_squared_error`, `msle/ mean_squared_logarithmic_error`, `explained_variance`, `r2_score`, `top_k_accuracy`, `KappaScore`, `MatthewsCorreff`, `Precision`, `Recall`, `FBeta`
+- `BatchNorm1dFlat` for using batchnorm in sequence models (e.g. RNNs, and their inputs and outputs)
+
+### Changed:
+
+- The data block API has additional checks with assertions (NaNs in columns used for inputs/labels in dataframes, empty items)
+- kwargs are checked in the data block API
+- `model_summary` now returns summary instead of printing it
+
+### Fixed:
+
+- Predictions now work in FP16 mode
+- Model is unwrapped at the end of a distributed training (thanks to mgrankin)
+- `DataBunch.export` works for multi-classification problems where `one_hot=True`
+- Fix bug in `DatasetFormatter`
+- Fix `LanguageLearner.predict`
+
+
+## 1.0.38 (2018-12-18)
+
+### Breaking changes:
+
+- If you want to import basic fastai functionality without an application, you
+  should now use `from fastai.basics import *` instead of `from fastai import
+  *`. (However note that you now don't need either, when using an application,
+  as mentioned in *Changed* below)
+- In fastai.text batch is now the first dimension
+
+### New:
+
+- `fastai.script` module contains a simple decorator for quickly creating CLIs
+- `setup_distrib` does all setup required for distributed training for you
+- Sample training scripts for MNIST sample (single GPU) and CIFAR10 (multi-GPU fp16) in `examples`
+- `fastai.launch` module for simplified single-machine multi-GPU training
+- `check_perf` - performance improvement recommendations
+- `distributed` module with helper functions to quickly launch a distributed training
+- temptative use of JIT C++ extensions to code the QRNN with `batch_first` argument, it needs a proper installation 
+  of cuda to be compiled at execution time
+
+### Changed:
+
+- When importing an application such as `from fastai.vision import *` you no
+  longer need to also `from fastai import *`
 
 
 ## 1.0.37 (2018-12-13)

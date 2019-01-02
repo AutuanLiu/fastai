@@ -8,7 +8,7 @@ This document will show you how to speed things up and get more out of your GPU/
 
 To check your setup for recommended performance improvements, run:
 ```
-python -c "import fastai; fastai.check_perf()"
+python -c "import fastai.utils.collect_env; fastai.utils.collect_env.check_perf()"
 ```
 
 ## Mixed Precision Training
@@ -39,7 +39,7 @@ Here is its [git-repo](https://github.com/libjpeg-turbo/libjpeg-turbo).
 
 `fastai` uses `Pillow` for its image processing and you have to rebuild `Pillow` to take advantage of `libjpeg-turbo`.
 
-To learn how to rebuild `Pillow-SIMD` or `Pillow` with `libjpeg-turbo` see the `Pillow-SIMD`](#pillow-simd) entry.
+To learn how to rebuild `Pillow-SIMD` or `Pillow` with `libjpeg-turbo` see the [`Pillow-SIMD`](#pillow-simd) entry.
 
 
 ### Pillow-SIMD
@@ -148,15 +148,15 @@ However, if at a later time something triggers a conda or pip update on `Pillow`
 Here is how you can see that the `PIL` library is dynamically linked to `libjpeg.so`:
 
 ```
-cd ~/anaconda3/envs/pytorch-dev/lib/python3.6/site-packages/PIL/
+cd ~/anaconda3/envs/fastai/lib/python3.6/site-packages/PIL/
 ldd  _imaging.cpython-36m-x86_64-linux-gnu.so | grep libjpeg
-        libjpeg.so.8 => ~/anaconda3/envs/pytorch-dev/lib/libjpeg.so.8
+        libjpeg.so.8 => ~/anaconda3/envs/fastai/lib/libjpeg.so.8
 ```
 
-and `~/anaconda3/envs/pytorch-dev/lib/libjpeg.so.8` was installed by `conda install -c conda-forge libjpeg-turbo`. We know that from:
+and `~/anaconda3/envs/fastai/lib/libjpeg.so.8` was installed by `conda install -c conda-forge libjpeg-turbo`. We know that from:
 
 ```
-cd  ~/anaconda3/envs/pytorch-dev/conda-meta/
+cd  ~/anaconda3/envs/fastai/conda-meta/
 grep libjpeg.so libjpeg-turbo-2.0.1-h470a237_0.json
 ```
 
@@ -164,28 +164,18 @@ If I now install the normal `libjpeg` and do the same check on the `jpeg`'s pack
 
 ```
 conda install jpeg
-cd  ~/anaconda3/envs/pytorch-dev/conda-meta/
+cd  ~/anaconda3/envs/fastai/conda-meta/
 grep libjpeg.so jpeg-9b-h024ee3a_2.json
 
 ```
-I find that it's `lib/libjpeg.so.9.2.0` (`~/anaconda3/envs/pytorch-dev/lib/libjpeg.so.9.2.0`).
+I find that it's `lib/libjpeg.so.9.2.0` (`~/anaconda3/envs/fastai/lib/libjpeg.so.9.2.0`).
 
-However, we now have an issue of the resolver showing both libraries:
-
-```
-cd ~/anaconda3/envs/pytorch-dev/lib/python3.6/site-packages/PIL/
-ldd  _imaging.cpython-36m-x86_64-linux-gnu.so | grep libjpeg
-        libjpeg.so.8 => ~/anaconda3/envs/pytorch-dev/lib/libjpeg.so.8
-        libjpeg.so.9 => ~/anaconda3/envs/pytorch-dev/lib/libjpeg.so.9
-```
-
-And we no longer can tell which of the two will be loaded at run-time and have to inspect `/dev/<pid>/maps` instead.
-
-Also, if `libjpeg-turbo` and `libjpeg` happen to have the same version number, even if you built `Pillow` or `Pillow-SIMD` against `libjpeg-turbo`, but then later installed the default `jpeg` with exactly the same version you will end up with the slower version.
+Also, if `libjpeg-turbo` and `libjpeg` happen to have the same version number, even if you built `Pillow` or `Pillow-SIMD` against `libjpeg-turbo`, but then later replaced it with the default `jpeg` with exactly the same version you will end up with the slower version, since the linking happens at build time. But so far that risk appears to be small, as of this writing, `libjpeg-turbo` releases are in the 8.x versions, whereas `jpeg`'s are in 9.x's.
 
 #### How to tell whether `Pillow` or `Pillow-SIMD` is using `libjpeg-turbo`?
 
-You need `Pillow>=5.4.0` to accomplish the following:
+You need `Pillow>=5.4.0` to accomplish the following (install from github until then:
+`pip install git+https://github.com/python-pillow/Pillow`).
 
 ```
 python -c "from PIL import features; print(features.check_feature('libjpeg_turbo'))"
@@ -207,4 +197,31 @@ else:
     print(f"libjpeg-turbo' status can't be derived - need Pillow(-SIMD)? >= 5.4.0 to tell, current version {Image.PILLOW_VERSION}")
 ```
 
-XXX: (will need to add `packaging` into dependencies, but it's already a dependency of setuptools.
+### Conda packages
+
+The `fastai` conda (test) channel has a `pillow` package built against a custom build of `libjpeg-turbo`. There are 3.6 and 3.7 linux builds:
+
+To install:
+```
+conda uninstall -y pillow libjpeg-turbo
+conda install -c fastai/label/test pillow
+```
+
+Note that this is pillow-5.4.0.dev0 build - i.e. don't use in production w/o testing.
+
+There is also `pillow-simd-5.3.0.post0` built against `libjpeg-turbo` and with avx2 - only linux/py36.
+
+```
+conda uninstall -y pillow libjpeg-turbo
+conda install -c fastai/label/test pillow-simd
+```
+
+Note that `pillow-simd` will get overwritten by `pillow` through update/install of any other package depending on `pillow`. You can fool `pillow-simd` into believing it is `pillow` and then it'll not get wiped out. You will have to [make a local build for that](https://github.com/fastai/fastai/blob/master/builds/custom-conda-builds/pillow-simd/conda-build.txt).
+
+If you have problems with these experimental packages please post [here](https://forums.fast.ai/t/performance-improvement-through-faster-software-components/32628/1), including the output of `python -m fastai.utils.check_perf` and `python -m fastai.utils.show_install` and the exact problem/errors you encountered.
+
+
+
+## GPU Performance
+
+See [GPU Memory Notes](https://docs.fast.ai/dev/gpu.html#gpu-memory-notes).

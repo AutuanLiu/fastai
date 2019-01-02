@@ -1,12 +1,9 @@
 "Module support for Collaborative Filtering"
-from .torch_core import *
-from .basic_train import *
-from .basic_data import *
-from .data_block import *
-from .layers import *
 from .tabular import *
+from . import tabular
 
-__all__ = ['EmbeddingDotBias', 'EmbeddingNN', 'collab_learner', 'CollabDataBunch', 'CollabLine', 'CollabList', 'CollabLearner']
+__all__ = [*tabular.__all__, 'EmbeddingDotBias', 'EmbeddingNN', 'collab_learner', 'CollabDataBunch', 'CollabLine',
+           'CollabList', 'CollabLearner']
 
 class CollabLine(TabularLine):
     "Base item for collaborative filtering, subclasses `TabularLine`."
@@ -18,7 +15,7 @@ class CollabList(TabularList):
     "Base `ItemList` for collaborative filtering, subclasses `TabularList`."
     _item_cls,_label_cls = CollabLine,FloatList
 
-    def reconstruct(self, t:Tensor): return CollabLine(t, [], self.classes, self.col_names)
+    def reconstruct(self, t:Tensor): return CollabLine(tensor(t), tensor([]), self.classes, self.col_names)
 
 class EmbeddingNN(TabularModel):
     "Subclass `TabularModel` to create a NN suitable for collaborative filtering."

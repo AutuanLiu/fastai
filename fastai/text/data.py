@@ -13,50 +13,49 @@ text_extensions = {'.txt'}
 
 class LanguageModelLoader():
     "Create a dataloader with bptt slightly changing."
-    def __init__(self, dataset:LabelList, bs:int=64, bptt:int=70, backwards:bool=False, shuffle:bool=False,
-                 max_len:int=25, p_bptt:int=0.95):
-        self.dataset,self.bs,self.bptt,self.backwards,self.shuffle,self.p_bptt = dataset,bs,bptt,backwards,shuffle,p_bptt
-        self.first,self.i,self.iter = True,0,0
-        self.n = len(np.concatenate(dataset.x.items)) // self.bs if len(dataset.x.items) > 0 else 0
-        self.max_len,self.num_workers = max_len,0
-        self.init_kwargs = dict(bs=bs, bptt=bptt, backwards=backwards, shuffle=shuffle, max_len=max_len)
-
+    def __init__(self, dataset:LabelList, lengths:Collection[int]=None, bs:int=64, bptt:int=70, backwards:bool=False, 
+                 shuffle:bool=False, drop_last:bool=False, max_len:int=25, p_bptt:int=0.95):
+        self.dataset,self.bs,self.bptt,self.backwards,self.shuffle = dataset,bs,bptt,backwards,shuffle
+        self.drop_last,self.max_len,self.p_bptt,self.num_workers = drop_last,max_len,p_bptt,0
+        self.init_kwargs = dict(lengths=lengths, bs=bs, bptt=bptt, backwards=backwards, shuffle=shuffle, max_len=max_len)
+        self.lengths = np.array(ifnone(lengths, [len(o) for o in dataset.x.items]))
+        self.n = self.lengths.sum() // self.bs
+        self.first = True
+        
+    def __len__(self): return int(math.ceil((self.n-1) / self.bptt))
+    def __getattr__(self,k:str)->Any: return getattr(self.dataset, k)
+    
     def __iter__(self):
         if getattr(self.dataset, 'item', None) is not None:
-            yield LongTensor(getattr(self.dataset, 'item')).unsqueeze(1),LongTensor([0])
-        idx = np.random.permutation(len(self.dataset)) if self.shuffle else range(len(self.dataset))
-        self.data = self.batchify(np.concatenate([self.dataset.x.items[i] for i in idx]))
-        self.i,self.iter = 0,0
-        while self.i < self.n-1 and self.iter<len(self):
-            if self.first and self.i == 0: self.first,seq_len = False,self.bptt + self.max_len
+            yield LongTensor(getattr(self.dataset, 'item'))[None],LongTensor([0])
+        self.idxs = np.random.permutation(len(self.dataset)) if self.shuffle else arange_of(self.dataset)
+        self.text_idx = np.concatenate([[0],self.lengths[self.idxs].cumsum()])
+        i,j = 0,0
+        while i < self.n-1 and j < len(self):
+            if self.first and j == 0: self.first,seq_len = False,self.bptt + self.max_len
             else:
                 bptt = self.bptt if np.random.random() < self.p_bptt else self.bptt / 2.
                 seq_len = max(5, int(np.random.normal(bptt, 5)))
-                seq_len = min(seq_len, self.bptt + self.max_len)
-            res = self.get_batch(self.i, seq_len)
-            self.i += seq_len
-            self.iter += 1
-            yield res
-
-    def __len__(self) -> int: return int(math.ceil((self.n-1) / self.bptt))
-    def __getattr__(self,k:str)->Any: return getattr(self.dataset, k)
+                seq_len = min(seq_len, self.bptt + self.max_len, self.n-1-i)
+            res = self._get_batch(i, seq_len+1)
+            i += seq_len
+            j += 1
+            yield res[:,:-1], res[:,1:]
+    
+    def _get_batch(self, i, seq_len):
+        return torch.cat([self._get_text(i + k * self.n, seq_len)[None] for k in range(self.bs)], 0)
+    
+    def _get_text(self, i, seq_len):
+        mask = (self.text_idx[1:] >= i) * (self.text_idx[:-1] < i + seq_len)
+        if self.backwards: concat = np.concatenate([self.dataset.x.items[i][::-1] for i in self.idxs[mask]])
+        else: concat = np.concatenate([self.dataset.x.items[i] for i in self.idxs[mask]])
+        start_idx = i-self.text_idx[mask.nonzero()[0][0]]
+        return LongTensor(concat[start_idx:start_idx+seq_len])
 
     @property
     def batch_size(self): return self.bs
     @batch_size.setter
     def batch_size(self, v): self.bs = v
-
-    def batchify(self, data:np.ndarray) -> LongTensor:
-        "Split the corpus `data` in batches."
-        nb = data.shape[0] // self.bs
-        data = np.array(data[:nb*self.bs]).reshape(self.bs, -1).T
-        if self.backwards: data=data[::-1].copy()
-        return LongTensor(data)
-
-    def get_batch(self, i:int, seq_len:int) -> Tuple[LongTensor, LongTensor]:
-        "Create a batch at `i` of a given `seq_len`."
-        seq_len = min(seq_len, len(self.data) - 1 - i)
-        return self.data[i:i+seq_len], self.data[i+1:i+1+seq_len]#.contiguous().view(-1)
 
 class SortSampler(Sampler):
     "Go through the text data by order of length."
@@ -91,20 +90,19 @@ def pad_collate(samples:BatchSamples, pad_idx:int=1, pad_first:bool=True) -> Tup
     "Function that collect samples and adds padding."
     samples = to_data(samples)
     max_len = max([len(s[0]) for s in samples])
-    res = torch.zeros(max_len, len(samples)).long() + pad_idx
+    res = torch.zeros(len(samples), max_len).long() + pad_idx
     for i,s in enumerate(samples):
-        if pad_first: res[-len(s[0]):,i] = LongTensor(s[0])
-        else:         res[:len(s[0]):,i] = LongTensor(s[0])
+        if pad_first: res[i,-len(s[0]):] = LongTensor(s[0])
+        else:         res[i,:len(s[0]):] = LongTensor(s[0])
     return res, tensor([s[1] for s in samples])
 
 def _get_processor(tokenizer:Tokenizer=None, vocab:Vocab=None, chunksize:int=10000, max_vocab:int=60000,
-                   min_freq:int=2, mark_fields:bool=True):
+                   min_freq:int=2, mark_fields:bool=False):
     return [TokenizeProcessor(tokenizer=tokenizer, chunksize=chunksize, mark_fields=mark_fields),
             NumericalizeProcessor(vocab=vocab, max_vocab=max_vocab, min_freq=min_freq)]
 
 class TextDataBunch(DataBunch):
     "General class to get a `DataBunch` for NLP. Subclassed by `TextLMDataBunch` and `TextClasDataBunch`."
-    _batch_first=False
 
     def save(self, cache_name:PathOrStr='tmp'):
         "Save the `DataBunch` in `self.path/cache_name` folder."
@@ -124,8 +122,8 @@ class TextDataBunch(DataBunch):
                  valid_lbls:Collection[Union[int,float]]=None, classes:Collection[Any]=None,
                  processor:PreProcessor=None, **kwargs) -> DataBunch:
         "Create a `TextDataBunch` from ids, labels and a `vocab`."
-        src = ItemLists(path, TextList(train_ids, vocab, path=path, processor=[ToIntsProcessor()]),
-                        TextList(valid_ids, vocab, path=path, processor=[ToIntsProcessor()]))
+        src = ItemLists(path, TextList(train_ids, vocab, path=path, processor=[]),
+                        TextList(valid_ids, vocab, path=path, processor=[]))
         src = src.label_for_lm() if cls==TextLMDataBunch else src.label_from_lists(train_lbls, valid_lbls, classes=classes, processor=[])
         if test_ids is not None: src.add_test(TextList(test_ids, vocab, path=path), label=train_lbls[0])
         src.valid.x.processor = ifnone(processor, [TokenizeProcessor(), NumericalizeProcessor(vocab=vocab)])
@@ -198,17 +196,17 @@ class TextDataBunch(DataBunch):
 class TextLMDataBunch(TextDataBunch):
     "Create a `TextDataBunch` suitable for training a language model."
     @classmethod
-    def create(cls, train_ds, valid_ds, test_ds=None, path:PathOrStr='.', **kwargs) -> DataBunch:
+    def create(cls, train_ds, valid_ds, test_ds=None, path:PathOrStr='.', no_check:bool=False, **kwargs) -> DataBunch:
         "Create a `TextDataBunch` in `path` from the `datasets` for language modelling."
         datasets = cls._init_ds(train_ds, valid_ds, test_ds)
         dataloaders = [LanguageModelLoader(ds, shuffle=(i==0), **kwargs) for i,ds in enumerate(datasets)]
-        return cls(*dataloaders, path=path)
+        return cls(*dataloaders, path=path, no_check=no_check)
 
 class TextClasDataBunch(TextDataBunch):
     "Create a `TextDataBunch` suitable for training an RNN classifier."
     @classmethod
     def create(cls, train_ds, valid_ds, test_ds=None, path:PathOrStr='.', bs=64, pad_idx=1, pad_first=True,
-               **kwargs) -> DataBunch:
+               no_check:bool=False, **kwargs) -> DataBunch:
         "Function that transform the `datasets` in a `DataBunch` for classification."
         datasets = cls._init_ds(train_ds, valid_ds, test_ds)
         collate_fn = partial(pad_collate, pad_idx=pad_idx, pad_first=pad_first)
@@ -219,7 +217,7 @@ class TextClasDataBunch(TextDataBunch):
             lengths = [len(t) for t in ds.x.items]
             sampler = SortSampler(ds.x, key=lengths.__getitem__)
             dataloaders.append(DataLoader(ds, batch_size=bs, sampler=sampler, **kwargs))
-        return cls(*dataloaders, path=path, collate_fn=collate_fn)
+        return cls(*dataloaders, path=path, collate_fn=collate_fn, no_check=no_check)
 
 def open_text(fn:PathOrStr, enc='utf-8'):
     "Read the text in `fn`."
@@ -227,7 +225,7 @@ def open_text(fn:PathOrStr, enc='utf-8'):
 
 class Text(ItemBase):
     "Basic item for <code>text</code> data in numericalized `ids`."
-    def __init__(self, ids, text): self.data,self.text = ids,text
+    def __init__(self, ids, text): self.data,self.text = np.array(ids, dtype=np.int64),text
     def __str__(self):  return str(self.text)
 
 class TokenizeProcessor(PreProcessor):
@@ -254,11 +252,6 @@ class NumericalizeProcessor(PreProcessor):
         if self.vocab is None: self.vocab = Vocab.create(ds.items, self.max_vocab, self.min_freq)
         ds.vocab = self.vocab
         super().process(ds)
-
-#TODO: Refactor
-class ToIntsProcessor(PreProcessor):
-    "`PreProcessor` that converts the ids in propers int array."
-    def process_one(self, item):  return np.array(item, dtype=np.int64)
 
 class OpenFileProcessor(PreProcessor):
     "`PreProcessor` that opens the filenames and read the texts."
@@ -329,7 +322,9 @@ def _join_texts(texts:Collection[str], mark_fields:bool=False):
     if not isinstance(texts, np.ndarray): texts = np.array(texts)
     if is1d(texts): texts = texts[:,None]
     df = pd.DataFrame({i:texts[:,i] for i in range(texts.shape[1])})
-    text_col = f'{BOS} {FLD} {1} ' + df[0] if mark_fields else  f'{BOS} ' + df[0]
+    #text_col = f'{BOS} {FLD} {1} ' + df[0] if mark_fields else  f'{BOS} ' + df[0]
+    text_col = f'{BOS} {FLD} {1} ' + df[0].astype(str) if mark_fields else  f'{BOS} ' + df[0].astype(str)
     for i in range(1,len(df.columns)):
-        text_col += (f' {FLD} {i+1} ' if mark_fields else ' ') + df[i]
+        #text_col += (f' {FLD} {i+1} ' if mark_fields else ' ') + df[i]
+        text_col += (f' {FLD} {i+1} ' if mark_fields else ' ') + df[i].astype(str)   
     return text_col.values

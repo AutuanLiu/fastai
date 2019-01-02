@@ -58,6 +58,14 @@ If you only care about faster JPEG decompression, it can be `pillow` or `pillow-
 pip install fastai
 ```
 
+### Bug Fix Install
+
+If a bug fix was made in git and you can't wait till a new release is made, you can install the bleeding edge version of `fastai` with:
+
+```
+pip install git+https://github.com/fastai/fastai.git
+```
+
 ### Developer Install
 
 The following instructions will result in a [pip editable install](https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs), so that you can `git pull` at any time and your environment will automatically get the updates:
@@ -66,7 +74,7 @@ The following instructions will result in a [pip editable install](https://pip.p
 git clone https://github.com/fastai/fastai
 cd fastai
 tools/run-after-git-clone
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 Note that this will install the `cuda9.0` `pytorch` build via default dependencies. If you need a higher or lower `cudaXX` build, following the instructions [here]( https://pytorch.org/get-started/locally/), to install the desired `pytorch` build.
@@ -84,7 +92,7 @@ Alternatively, you can do a quick CLI test:
 jupyter nbconvert --execute --ExecutePreprocessor.timeout=600 --to notebook examples/tabular.ipynb
 ```
 
-Please refer to [CONTRIBUTING.md](https://github.com/fastai/fastai/blob/master/CONTRIBUTING.md) and  [develop.md](https://github.com/fastai/fastai/blob/master/docs/develop.md) for more details on how to contribute to the `fastai` project.
+Please refer to [CONTRIBUTING.md](https://github.com/fastai/fastai/blob/master/CONTRIBUTING.md) and [Notes For Developers](https://docs.fast.ai/dev/develop.html) for more details on how to contribute to the `fastai` project.
 
 
 
@@ -181,13 +189,16 @@ In order to update your environment, simply install `fastai` in exactly the same
 
 Top level files `environment.yml` and `environment-cpu.yml` belong to the old fastai (0.7). `conda env update` is no longer the way to update your `fastai-1.x` environment. These files remain because the fastai course-v2 video instructions rely on this setup. Eventually, once fastai course-v3 p1 and p2 will be completed, they will probably be moved to where they belong - under `old/`.
 
+## Contribution guidelines
+If you want to contribute to `fastai`, be sure to review the [contribution guidelines](https://github.com/fastai/fastai/blob/master/CONTRIBUTING.md). This project adheres to fastai's [code of conduct](https://github.com/fastai/fastai/blob/master/CODE-OF-CONDUCT.md). By participating, you are expected to uphold this code.
 
+We use GitHub issues for tracking requests and bugs, so please see [fastai forum](https://forums.fast.ai/) for general questions and discussion.
+
+The fastai project strives to abide by generally accepted best practices in open-source software development:
 
 ## History
 
 A detailed history of changes can be found [here](https://github.com/fastai/fastai/blob/master/CHANGES.md).
-
-
 
 ## Copyright
 

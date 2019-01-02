@@ -47,7 +47,7 @@ sidebar_d = {
                 'vision.gan': '/vision.gan',
                 'vision.model overview': '/vision.models',
                 'vision.models.unet': '/vision.models.unet',
-                'vision.widgets': '/widgets'
+                'widgets.image_cleaner': '/widgets.image_cleaner'
             }
         },
         'empty1': {
@@ -77,6 +77,9 @@ sidebar_d = {
         'datasets': '/datasets',
         'core': '/core',
         'torch_core': '/torch_core',
+    },
+    'Utils': {
+        'Helpers': '/utils.collect_env'
     },
     'Tutorials': {
         'Look at data': '/tutorial.data',
